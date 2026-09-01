@@ -142,17 +142,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         {/* User Card */}
         <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
-            {user?.name?.slice(0, 2).toUpperCase() || 'AD'}
+            {typeof user?.name === 'string' ? user.name.slice(0, 2).toUpperCase() : 'AD'}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1">
               <p className="text-xs text-slate-900 dark:text-white font-bold truncate">
-                {user?.name || 'Administrator'}
+                {typeof user?.name === 'string' ? user.name : 'Administrator'}
               </p>
               <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
             </div>
             <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
-              {user?.email || 'admin@nuqudy.id'}
+              {typeof user?.email === 'string' ? user.email : 'admin@nuqudy.app'}
             </p>
           </div>
           <button
