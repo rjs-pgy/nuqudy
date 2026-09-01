@@ -1,6 +1,7 @@
 /**
  * Storage and Data Synchronization Service for NUQUDY
  * Seamlessly manages local persistence, demo data, and Google Apps Script Web App sync.
+ * Persists Users & Passwords, Transactions, Categories, Accounts, and Settings.
  */
 
 import {
@@ -15,9 +16,9 @@ import {
 } from '../types';
 import { generateId, formatDateInput, isDateInPeriod } from '../utils/formatters';
 
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   USERS: 'nuqudy_users_v1',
-  CURRENT_USER: 'nuqudy_active_user_v1',
+  CURRENT_USER: 'nuqudy_active_session_v1',
   TRANSACTIONS: 'nuqudy_transactions_v1',
   CATEGORIES: 'nuqudy_categories_v1',
   ACCOUNTS: 'nuqudy_accounts_v1',
@@ -25,12 +26,15 @@ const STORAGE_KEYS = {
   DATABASE_INITIALIZED: 'nuqudy_db_init_v1'
 };
 
-// Default Demo User
-const DEFAULT_DEMO_USER: User = {
+// Default Demo User with credentials
+export const DEFAULT_DEMO_USER: User = {
   userId: 'USR-ADMIN01',
   username: 'admin',
+  password: 'admin123',
   name: 'Pengguna Nuqudy',
   email: 'admin@nuqudy.app',
+  currency: 'Rp',
+  role: 'admin',
   status: 'active',
   createdAt: new Date().toISOString()
 };
@@ -95,7 +99,6 @@ const DEFAULT_CATEGORIES: Category[] = [
   { categoryId: 'CAT-EX-8', userId: 'USR-ADMIN01', name: 'Sedekah & Donasi', type: 'expense', icon: 'Heart', color: '#10b981', createdAt: new Date().toISOString() }
 ];
 
-// Initial Transactions Generator
 function generateInitialTransactions(): Transaction[] {
   const today = new Date();
   const d = (offsetDays: number) => {
@@ -201,14 +204,19 @@ class StorageService {
     try {
       const hasInit = localStorage.getItem(STORAGE_KEYS.DATABASE_INITIALIZED);
       if (!hasInit || forceReset) {
-        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([DEFAULT_DEMO_USER]));
+        // Save initial user list
+        const existingUsersRaw = localStorage.getItem(STORAGE_KEYS.USERS);
+        if (!existingUsersRaw || forceReset) {
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify([DEFAULT_DEMO_USER]));
+        }
+
         localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(DEFAULT_ACCOUNTS));
         localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
         localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(generateInitialTransactions()));
         
         const defaultSettings: AppSettings = {
           theme: 'light',
-          currency: 'IDR',
+          currency: 'Rp',
           syncMode: 'local',
           lastSyncedAt: new Date().toISOString()
         };
@@ -221,13 +229,70 @@ class StorageService {
     }
   }
 
+  // --- USERS MANAGEMENT ---
+  public getUsers(): User[] {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return [DEFAULT_DEMO_USER];
+  }
+
+  public saveUsers(users: User[]): void {
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  }
+
+  public addUser(user: Partial<User> & { username: string }): User {
+    const users = this.getUsers();
+    const cleanUsername = user.username.trim().toLowerCase();
+    const newUser: User = {
+      userId: user.userId || generateId('USR'),
+      username: cleanUsername,
+      password: user.password || 'admin123',
+      name: user.name?.trim() || cleanUsername,
+      email: user.email?.trim() || `${cleanUsername}@nuqudy.app`,
+      currency: user.currency || 'Rp',
+      role: user.role || 'member',
+      status: user.status || 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    users.push(newUser);
+    this.saveUsers(users);
+    return newUser;
+  }
+
+  public updateUser(userId: string, data: Partial<User>): boolean {
+    const users = this.getUsers();
+    const index = users.findIndex(u => u.userId === userId || u.username === data.username);
+    if (index === -1) return false;
+    users[index] = {
+      ...users[index],
+      ...data,
+      updatedAt: new Date().toISOString()
+    };
+    this.saveUsers(users);
+    return true;
+  }
+
+  public deleteUser(userId: string): boolean {
+    const users = this.getUsers();
+    const filtered = users.filter(u => u.userId !== userId);
+    if (filtered.length === users.length) return false;
+    this.saveUsers(filtered);
+    return true;
+  }
+
   // --- SETTINGS ---
   public getSettings(): AppSettings {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       if (raw) return JSON.parse(raw);
     } catch (e) {}
-    return { theme: 'light', currency: 'IDR', syncMode: 'local' };
+    return { theme: 'light', currency: 'Rp', syncMode: 'local' };
   }
 
   public saveSettings(settings: Partial<AppSettings>): AppSettings {
@@ -387,11 +452,13 @@ class StorageService {
     return true;
   }
 
-  // --- GAS CLOUD REAL-TIME API (Google Sheets Backend) ---
+  // --- GAS CLOUD REAL-TIME API (Google Sheets Backend Multi-Sheet) ---
+
   /**
    * Fetch data from Google Apps Script Web App (via GET / doGet)
+   * Supports both full database bundle and transaction list.
    */
-  public async fetchGasData(customUrl?: string): Promise<ApiResponse<Transaction[]>> {
+  public async fetchGasData(customUrl?: string): Promise<ApiResponse<any>> {
     const url = customUrl || this.getSettings().gasWebAppUrl;
     if (!url) {
       return { success: false, message: 'URL Google Apps Script belum dikonfigurasi.' };
@@ -404,19 +471,147 @@ class StorageService {
       });
       const json = await response.json();
       
-      if (json && json.success && Array.isArray(json.data)) {
-        // Simpan transaksi terbaru ke local storage untuk fast-loading
-        const currentList = this.getTransactions();
-        // Merge or replace
-        if (json.data.length > 0) {
-          localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(json.data));
+      if (json && json.success) {
+        // Multi-Sheet Bundle response { users, transactions, categories, accounts, settings }
+        if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
+          if (Array.isArray(json.data.transactions)) {
+            localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(json.data.transactions));
+          }
+          if (Array.isArray(json.data.users) && json.data.users.length > 0) {
+            localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(json.data.users));
+          }
+          if (Array.isArray(json.data.categories) && json.data.categories.length > 0) {
+            localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(json.data.categories));
+          }
+          if (Array.isArray(json.data.accounts) && json.data.accounts.length > 0) {
+            localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(json.data.accounts));
+          }
+          this.saveSettings({ lastSyncedAt: new Date().toISOString() });
+          return { success: true, message: 'Seluruh database berhasil disinkronkan dari Google Sheets', data: json.data };
         }
-        this.saveSettings({ lastSyncedAt: new Date().toISOString() });
-        return { success: true, message: 'Data berhasil disinkronkan dari Google Sheets', data: json.data };
+
+        // Backward compatibility: array of transactions
+        if (Array.isArray(json.data)) {
+          if (json.data.length > 0) {
+            localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(json.data));
+          }
+          this.saveSettings({ lastSyncedAt: new Date().toISOString() });
+          return { success: true, message: 'Transaksi berhasil disinkronkan dari Google Sheets', data: json.data };
+        }
       }
       return { success: false, message: json.message || 'Format data dari Google Sheets tidak valid' };
     } catch (err: any) {
       return { success: false, message: 'Gagal menghubungi Google Apps Script: ' + err.message };
+    }
+  }
+
+  /**
+   * Sync/Push Entire Local Database to Google Sheets in 1 Call (Users, Transactions, Categories, Accounts)
+   */
+  public async syncAllToGas(customUrl?: string): Promise<ApiResponse> {
+    const url = customUrl || this.getSettings().gasWebAppUrl;
+    if (!url) {
+      return { success: false, message: 'URL Google Apps Script belum dikonfigurasi.' };
+    }
+
+    try {
+      const payload = {
+        action: 'SYNC_ALL',
+        users: this.getUsers(),
+        transactions: this.getTransactions(),
+        categories: this.getCategories(),
+        accounts: this.getAccounts(),
+        settings: this.getSettings()
+      };
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const json = await response.json();
+      if (json.success) {
+        this.saveSettings({ lastSyncedAt: new Date().toISOString() });
+      }
+      return json;
+    } catch (err: any) {
+      return { success: false, message: 'Gagal sinkronisasi ke Google Sheets: ' + err.message };
+    }
+  }
+
+  /**
+   * Update user profile to Google Sheets
+   */
+  public async updateUserGas(payload: { userId?: string; username?: string; name?: string; email?: string; currency?: string }, customUrl?: string): Promise<ApiResponse> {
+    const url = customUrl || this.getSettings().gasWebAppUrl;
+    if (!url) return { success: false, message: 'URL GAS belum dikonfigurasi' };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'UPDATE_PROFILE', ...payload })
+      });
+      return await response.json();
+    } catch (err: any) {
+      return { success: false, message: 'Koneksi error: ' + err.message };
+    }
+  }
+
+  /**
+   * Change user password to Google Sheets
+   */
+  public async changePasswordGas(payload: { userId?: string; username?: string; oldPassword?: string; newPassword: string }, customUrl?: string): Promise<ApiResponse> {
+    const url = customUrl || this.getSettings().gasWebAppUrl;
+    if (!url) return { success: false, message: 'URL GAS belum dikonfigurasi' };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'CHANGE_PASSWORD', ...payload })
+      });
+      return await response.json();
+    } catch (err: any) {
+      return { success: false, message: 'Koneksi error: ' + err.message };
+    }
+  }
+
+  /**
+   * Add new user to Google Sheets
+   */
+  public async addUserGas(user: Partial<User>, customUrl?: string): Promise<ApiResponse> {
+    const url = customUrl || this.getSettings().gasWebAppUrl;
+    if (!url) return { success: false, message: 'URL GAS belum dikonfigurasi' };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'ADD_USER', ...user })
+      });
+      return await response.json();
+    } catch (err: any) {
+      return { success: false, message: 'Koneksi error: ' + err.message };
+    }
+  }
+
+  /**
+   * Delete user from Google Sheets
+   */
+  public async deleteUserGas(userId: string, customUrl?: string): Promise<ApiResponse> {
+    const url = customUrl || this.getSettings().gasWebAppUrl;
+    if (!url) return { success: false, message: 'URL GAS belum dikonfigurasi' };
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'DELETE_USER', userId })
+      });
+      return await response.json();
+    } catch (err: any) {
+      return { success: false, message: 'Koneksi error: ' + err.message };
     }
   }
 
@@ -489,8 +684,9 @@ class StorageService {
   // --- EXPORT & BACKUP ---
   public exportDatabaseJson(): string {
     return JSON.stringify({
-      version: '1.0.0',
+      version: '2.0.0',
       exportedAt: new Date().toISOString(),
+      users: this.getUsers(),
       accounts: this.getAccounts(),
       categories: this.getCategories(),
       transactions: this.getTransactions(),
@@ -505,6 +701,7 @@ class StorageService {
   public importDatabaseJson(jsonStr: string): boolean {
     try {
       const data = JSON.parse(jsonStr);
+      if (data.users) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(data.users));
       if (data.accounts) localStorage.setItem(STORAGE_KEYS.ACCOUNTS, JSON.stringify(data.accounts));
       if (data.categories) localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(data.categories));
       if (data.transactions) localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(data.transactions));
