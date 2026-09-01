@@ -12,7 +12,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<ApiResponse<User>>;
   logout: () => void;
-  updateProfile: (name: string, email: string) => boolean;
+  updateProfile: (profileOrName: string | { name?: string; email?: string; currency?: string }, email?: string) => boolean;
   changePassword: (newPassword: string) => boolean;
 }
 
@@ -25,12 +25,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore session on mount
+  // Restore session on mount with automatic self-healing for corrupted data
   useEffect(() => {
     try {
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
       if (stored) {
-        setUser(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          // Self-heal corrupted user object if name was stored as an object
+          let cleanName = 'Pengguna Nuqudy';
+          if (typeof parsed.name === 'string') {
+            cleanName = parsed.name;
+          } else if (parsed.name && typeof parsed.name === 'object' && parsed.name.name) {
+            cleanName = String(parsed.name.name);
+          }
+
+          let cleanEmail = 'admin@nuqudy.app';
+          if (typeof parsed.email === 'string') {
+            cleanEmail = parsed.email;
+          } else if (parsed.name && typeof parsed.name === 'object' && parsed.name.email) {
+            cleanEmail = String(parsed.name.email);
+          }
+
+          const sanitizedUser: User = {
+            userId: parsed.userId || 'USR-ADMIN01',
+            username: parsed.username || 'admin',
+            name: cleanName,
+            email: cleanEmail,
+            currency: typeof parsed.currency === 'string' ? parsed.currency : (parsed.name?.currency || 'Rp'),
+            status: parsed.status || 'active',
+            createdAt: parsed.createdAt || new Date().toISOString()
+          };
+
+          setUser(sanitizedUser);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sanitizedUser));
+        }
       }
     } catch (e) {
       console.error('Session restore error', e);
@@ -117,11 +146,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(AUTH_STORAGE_KEY);
   };
 
-  const updateProfile = (name: string, email: string): boolean => {
+  const updateProfile = (
+    profileOrName: string | { name?: string; email?: string; currency?: string },
+    emailArg?: string
+  ): boolean => {
     if (!user) return false;
-    const updated = { ...user, name, email };
+    let newName = user.name || 'Pengguna Nuqudy';
+    let newEmail = user.email || 'admin@nuqudy.app';
+    let newCurrency = user.currency || 'Rp';
+
+    if (typeof profileOrName === 'object' && profileOrName !== null) {
+      if (profileOrName.name !== undefined) newName = String(profileOrName.name).trim();
+      if (profileOrName.email !== undefined) newEmail = String(profileOrName.email).trim();
+      if (profileOrName.currency !== undefined) newCurrency = String(profileOrName.currency).trim();
+    } else if (typeof profileOrName === 'string') {
+      newName = profileOrName.trim();
+      if (emailArg !== undefined) newEmail = emailArg.trim();
+    }
+
+    const updated: User = {
+      ...user,
+      name: newName,
+      email: newEmail,
+      currency: newCurrency
+    };
+
     setUser(updated);
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
+
+    // Also update users array in storage
+    try {
+      const storedUsersRaw = localStorage.getItem(USERS_STORAGE_KEY);
+      if (storedUsersRaw) {
+        const storedUsers = JSON.parse(storedUsersRaw);
+        const userIndex = storedUsers.findIndex((u: any) => u.userId === user.userId || u.username === user.username);
+        if (userIndex !== -1) {
+          storedUsers[userIndex] = { ...storedUsers[userIndex], name: newName, email: newEmail };
+          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(storedUsers));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to update users storage list', e);
+    }
+
     return true;
   };
 
