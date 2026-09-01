@@ -9,16 +9,19 @@ export type AccountType = 'cash' | 'bank' | 'ewallet' | 'savings' | 'other';
 
 export type PeriodFilter = 'today' | 'this_week' | 'this_month' | 'this_year' | 'all' | 'custom';
 
-export type ActiveTab = 'dashboard' | 'transactions' | 'categories' | 'accounts' | 'reports' | 'settings' | 'gas' | 'gas_hub';
+export type ActiveTab = 'dashboard' | 'transactions' | 'categories' | 'accounts' | 'reports' | 'user_management' | 'settings' | 'gas' | 'gas_hub' | 'profile';
 
 export interface User {
   userId: string;
   username: string;
+  password?: string;
   name: string;
   email: string;
   currency?: string;
+  role?: 'admin' | 'member';
   status: 'active' | 'inactive';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Transaction {
