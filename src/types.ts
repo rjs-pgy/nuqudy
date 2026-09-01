@@ -16,6 +16,7 @@ export interface User {
   username: string;
   name: string;
   email: string;
+  currency?: string;
   status: 'active' | 'inactive';
   createdAt: string;
 }
