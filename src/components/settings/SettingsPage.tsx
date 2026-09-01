@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   User,
@@ -29,28 +29,49 @@ export const SettingsPage: React.FC = () => {
     resetToDemoData,
     setConfirmModal,
     addToast,
+    showToast,
     refreshAllData
   } = useFinance();
 
   // Profile states
-  const [name, setName] = useState(user?.name || 'Administrator');
-  const [email, setEmail] = useState(user?.email || 'admin@nuqudy.id');
-  const [currency, setCurrency] = useState(user?.currency || 'Rp');
+  const [name, setName] = useState(user?.name ? (typeof user.name === 'string' ? user.name : 'Administrator') : 'Administrator');
+  const [email, setEmail] = useState(user?.email || 'admin@nuqudy.app');
+  const [currency, setCurrency] = useState(user?.currency || storageService.getSettings().currency || 'Rp');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Webhook URL
-  const [inputGasUrl, setInputGasUrl] = useState(gasUrl);
+  const [inputGasUrl, setInputGasUrl] = useState(gasUrl || storageService.getSettings().gasWebAppUrl || '');
+
+  // Keep in sync with user changes
+  useEffect(() => {
+    if (user) {
+      if (typeof user.name === 'string') setName(user.name);
+      if (typeof user.email === 'string') setEmail(user.email);
+      if (user.currency) setCurrency(user.currency);
+    }
+  }, [user]);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanName = name.trim() || 'Pengguna Nuqudy';
+    const cleanEmail = email.trim() || 'admin@nuqudy.app';
+    const cleanCurrency = currency.trim() || 'Rp';
+    const cleanGasUrl = inputGasUrl.trim();
+
     updateProfile({
-      name: name.trim(),
-      email: email.trim(),
-      currency: currency.trim()
+      name: cleanName,
+      email: cleanEmail,
+      currency: cleanCurrency
     });
-    setGasUrl(inputGasUrl.trim());
+
+    setGasUrl(cleanGasUrl);
+    storageService.saveSettings({
+      currency: cleanCurrency,
+      gasWebAppUrl: cleanGasUrl
+    });
+
     setSavedSuccess(true);
-    addToast('Pengaturan profil berhasil disimpan', 'success');
+    showToast('success', 'Pengaturan Disimpan', 'Profil pengguna dan pengaturan aplikasi berhasil diperbarui.');
     setTimeout(() => setSavedSuccess(false), 2000);
   };
 
