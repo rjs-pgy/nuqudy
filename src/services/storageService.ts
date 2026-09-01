@@ -267,7 +267,7 @@ class StorageService {
 
   public updateUser(userId: string, data: Partial<User>): boolean {
     const users = this.getUsers();
-    const index = users.findIndex(u => u.userId === userId || u.username === data.username);
+    const index = users.findIndex(u => u.userId === userId);
     if (index === -1) return false;
     users[index] = {
       ...users[index],
