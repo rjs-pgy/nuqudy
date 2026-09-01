@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Plus,
   RefreshCw,
   Menu,
   Sun,
-  Moon
+  Moon,
+  Smartphone,
+  QrCode
 } from 'lucide-react';
 import { useFinance } from '../../context/FinanceContext';
 import { PeriodFilter } from '../../types';
+import { ShareDeviceModal } from '../modals/ShareDeviceModal';
 
 interface HeaderProps {
   onToggleMobileMenu?: () => void;
@@ -25,6 +28,8 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
     isDark,
     toggleDarkMode
   } = useFinance();
+
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const tabTitles: Record<string, { title: string; subtitle: string }> = {
     dashboard: { title: 'Ringkasan Keuangan', subtitle: 'Pantau arus kas dan saldo terkini' },
@@ -107,6 +112,18 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
           )}
         </button>
 
+        {/* Open on Phone / Multi-Device Share */}
+        {gasUrl && (
+          <button
+            onClick={() => setShowShareModal(true)}
+            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-xs font-semibold transition-colors cursor-pointer"
+            title="Bagikan Link / QR Code untuk HP"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+            <span className="hidden lg:inline">Buka di HP</span>
+          </button>
+        )}
+
         {/* Backend / Google Sheets Sync Button */}
         <button
           onClick={syncWithBackend}
@@ -134,6 +151,13 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
           <span className="tracking-wide uppercase">Transaksi</span>
         </button>
       </div>
+
+      {/* Share Device Modal for Phone / Multi-Device */}
+      <ShareDeviceModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        gasUrlOverride={gasUrl}
+      />
     </header>
   );
 };

@@ -14,12 +14,15 @@ import {
   Trash2,
   DownloadCloud,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Smartphone,
+  QrCode
 } from 'lucide-react';
 import { GAS_FILES } from '../../utils/gasCode';
 import { storage } from '../../services/storageService';
 import { useFinance } from '../../context/FinanceContext';
 import { formatRupiah } from '../../utils/formatters';
+import { ShareDeviceModal } from '../modals/ShareDeviceModal';
 
 export const GasHubPage: React.FC = () => {
   const { showToast, reloadAllData, transactions } = useFinance();
@@ -28,6 +31,7 @@ export const GasHubPage: React.FC = () => {
   const [gasUrlInput, setGasUrlInput] = useState(() => storage.getSettings().gasWebAppUrl || '');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: any } | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const activeFile = GAS_FILES[activeFileIndex] || GAS_FILES[0];
 
@@ -373,6 +377,38 @@ export const GasHubPage: React.FC = () => {
           </pre>
         </div>
       </div>
+
+      {/* 4. Multi-Device Auto-Sync Card */}
+      <div className="p-6 rounded-3xl bg-gradient-to-r from-teal-900/90 to-emerald-950/90 text-white shadow-lg border border-teal-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+            <Smartphone className="w-6 h-6 text-teal-300" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-white">
+              Buka di HP &amp; Perangkat Lain (Auto-Connect)
+            </h4>
+            <p className="text-xs text-teal-200/80 mt-0.5 max-w-xl">
+              Dapatkan QR Code atau Link instan agar HP dan laptop lain langsung terhubung ke database Google Spreadsheet yang sama secara real-time.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setShowShareModal(true)}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 active:scale-95 text-slate-950 font-bold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap"
+        >
+          <QrCode className="w-4 h-4" />
+          <span>Tampilkan QR &amp; Link HP</span>
+        </button>
+      </div>
+
+      {/* Share Device Modal */}
+      <ShareDeviceModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        gasUrlOverride={gasUrlInput}
+      />
     </div>
   );
 };

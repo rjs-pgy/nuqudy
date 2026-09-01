@@ -156,6 +156,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setUser(sessionUser);
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(sessionUser));
+
+    // Immediately pull latest database bundle from Google Sheets so new device receives all transactions & data
+    if (settings.gasWebAppUrl) {
+      try {
+        await storageService.fetchGasData();
+      } catch (e) {
+        console.warn('Initial login GAS sync error:', e);
+      }
+    }
+
     setIsLoading(false);
 
     return {

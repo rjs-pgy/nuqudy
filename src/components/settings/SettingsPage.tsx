@@ -13,11 +13,14 @@ import {
   Save,
   DollarSign,
   Globe,
-  Sliders
+  Sliders,
+  Smartphone,
+  QrCode
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useFinance } from '../../context/FinanceContext';
 import { storageService } from '../../services/storageService';
+import { ShareDeviceModal } from '../modals/ShareDeviceModal';
 
 export const SettingsPage: React.FC = () => {
   const { user, updateProfile } = useAuth();
@@ -38,6 +41,7 @@ export const SettingsPage: React.FC = () => {
   const [email, setEmail] = useState(user?.email || 'admin@nuqudy.app');
   const [currency, setCurrency] = useState(user?.currency || storageService.getSettings().currency || 'Rp');
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // Webhook URL
   const [inputGasUrl, setInputGasUrl] = useState(gasUrl || storageService.getSettings().gasWebAppUrl || '');
@@ -194,22 +198,35 @@ export const SettingsPage: React.FC = () => {
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
-          >
-            {savedSuccess ? (
-              <>
-                <Check className="w-4 h-4 stroke-[3]" />
-                Tersimpan!
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                Simpan Perubahan
-              </>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <button
+              type="submit"
+              className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+            >
+              {savedSuccess ? (
+                <>
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  Tersimpan!
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  Simpan Perubahan
+                </>
+              )}
+            </button>
+
+            {inputGasUrl && (
+              <button
+                type="button"
+                onClick={() => setShowShareModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/60 font-bold text-xs transition-colors cursor-pointer"
+              >
+                <Smartphone className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span>Buka di HP (QR &amp; Link)</span>
+              </button>
             )}
-          </button>
+          </div>
         </form>
       </div>
 
@@ -294,6 +311,13 @@ export const SettingsPage: React.FC = () => {
           Reset ke Data Demo Awal
         </button>
       </div>
+
+      {/* Share Device Modal for Phone / Multi-Device */}
+      <ShareDeviceModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        gasUrlOverride={inputGasUrl}
+      />
     </div>
   );
 };

@@ -196,9 +196,42 @@ class StorageService {
   }
 
   /**
-   * Initialize local database with demo data if empty
+   * Initialize local database with demo data if empty.
+   * Also auto-detects shared GAS Web App URLs from query or hash parameters (e.g. ?gas=... or #gas=...).
    */
   public initDatabase(forceReset = false): void {
+    // 1. Check for shared GAS URL in URL query or hash params first
+    try {
+      if (typeof window !== 'undefined' && window.location) {
+        const searchParams = new URLSearchParams(window.location.search);
+        let gasParam = searchParams.get('gas') || searchParams.get('gasUrl') || searchParams.get('url');
+
+        if (!gasParam && window.location.hash) {
+          const hashStr = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
+          const hashParams = new URLSearchParams(hashStr);
+          gasParam = hashParams.get('gas') || hashParams.get('gasUrl');
+        }
+
+        if (gasParam) {
+          const decoded = decodeURIComponent(gasParam).trim();
+          if (decoded.startsWith('http')) {
+            const rawSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+            let currSettings: AppSettings = rawSettings ? JSON.parse(rawSettings) : {
+              theme: 'light',
+              currency: 'Rp',
+              syncMode: 'gas_cloud',
+              lastSyncedAt: new Date().toISOString()
+            };
+            currSettings.gasWebAppUrl = decoded;
+            currSettings.syncMode = 'gas_cloud';
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(currSettings));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Auto-detect URL param error:', e);
+    }
+
     if (this.isInitialized && !forceReset) return;
 
     try {
@@ -214,12 +247,18 @@ class StorageService {
         localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(DEFAULT_CATEGORIES));
         localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(generateInitialTransactions()));
         
-        const defaultSettings: AppSettings = {
+        const existingSettingsRaw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+        let defaultSettings: AppSettings = {
           theme: 'light',
           currency: 'Rp',
           syncMode: 'local',
           lastSyncedAt: new Date().toISOString()
         };
+        if (existingSettingsRaw) {
+          try {
+            defaultSettings = { ...defaultSettings, ...JSON.parse(existingSettingsRaw) };
+          } catch (err) {}
+        }
         localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(defaultSettings));
         localStorage.setItem(STORAGE_KEYS.DATABASE_INITIALIZED, 'true');
       }
@@ -483,6 +522,11 @@ class StorageService {
       const json = await response.json();
       
       if (json && json.success) {
+        // If a customUrl was provided and succeeded, persist it to settings
+        if (customUrl) {
+          this.saveSettings({ gasWebAppUrl: customUrl.trim(), syncMode: 'gas_cloud' });
+        }
+
         // Multi-Sheet Bundle response { users, transactions, categories, accounts, settings }
         if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
           if (Array.isArray(json.data.transactions)) {
