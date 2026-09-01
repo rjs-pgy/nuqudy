@@ -32,6 +32,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
     categories: { title: 'Manajemen Kategori', subtitle: 'Kelola kelompok transaksi Anda' },
     accounts: { title: 'Akun & Dompet', subtitle: 'Kelola rekening bank, e-wallet, dan tunai' },
     reports: { title: 'Laporan Keuangan', subtitle: 'Analisis dan cetak ringkasan performa' },
+    user_management: { title: 'Kelola Akun & Sandi', subtitle: 'Manajemen pengguna, password, dan sinkronisasi data akun' },
     gas: { title: 'Backend Hub (GAS)', subtitle: 'Koneksi Google Spreadsheet & Apps Script' },
     settings: { title: 'Pengaturan', subtitle: 'Konfigurasi akun dan sistem aplikasi' }
   };

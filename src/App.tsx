@@ -12,10 +12,10 @@ import { AccountsPage } from './components/accounts/AccountsPage';
 import { ReportsPage } from './components/reports/ReportsPage';
 import { GasBackendHubPage } from './components/gas/GasBackendHubPage';
 import { SettingsPage } from './components/settings/SettingsPage';
+import { AccountManagementPage } from './components/profile/AccountManagementPage';
 import { TransactionModal } from './components/transactions/TransactionModal';
 import { ConfirmModal } from './components/common/ConfirmModal';
 import { ToastContainer } from './components/common/Toast';
-import { X } from 'lucide-react';
 
 const MainAppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
@@ -43,6 +43,8 @@ const MainAppContent: React.FC = () => {
         return <AccountsPage />;
       case 'reports':
         return <ReportsPage />;
+      case 'user_management':
+        return <AccountManagementPage />;
       case 'gas':
         return <GasBackendHubPage />;
       case 'settings':

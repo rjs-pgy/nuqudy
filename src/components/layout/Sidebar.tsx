@@ -12,7 +12,8 @@ import {
   Sun,
   ShieldCheck,
   Plus,
-  X
+  X,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useFinance } from '../../context/FinanceContext';
@@ -32,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     { id: 'categories', label: 'Kategori', icon: FolderTree },
     { id: 'accounts', label: 'Akun Keuangan', icon: WalletCards },
     { id: 'reports', label: 'Laporan', icon: FileSpreadsheet },
+    { id: 'user_management', label: 'Kelola Akun & Sandi', icon: UserCheck },
     { id: 'gas', label: 'Backend Hub (GAS)', icon: Code2 },
     { id: 'settings', label: 'Pengaturan', icon: Settings },
   ];
@@ -61,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Mobile close button (neatly placed inside the header row) */}
+        {/* Mobile close button */}
         {onClose && (
           <button
             onClick={onClose}
@@ -139,14 +141,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           </button>
         </div>
 
-        {/* User Card */}
-        <div className="flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
+        {/* User Card - Clickable to Open Account Management */}
+        <div
+          onClick={() => handleNavClick('user_management')}
+          className="flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60 shadow-2xs cursor-pointer hover:border-emerald-500/50 transition-colors group"
+          title="Kelola Akun & Sandi"
+        >
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-bold text-emerald-700 dark:text-emerald-400 shrink-0 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
             {typeof user?.name === 'string' ? user.name.slice(0, 2).toUpperCase() : 'AD'}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1">
-              <p className="text-xs text-slate-900 dark:text-white font-bold truncate">
+              <p className="text-xs text-slate-900 dark:text-white font-bold truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                 {typeof user?.name === 'string' ? user.name : 'Administrator'}
               </p>
               <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -156,7 +162,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
             </p>
           </div>
           <button
-            onClick={logout}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              logout();
+            }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
             title="Keluar"
             id="sidebar-logout-btn"
