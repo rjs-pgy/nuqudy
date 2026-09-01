@@ -1,0 +1,6 @@
+{
+  "name": "Nuqudy",
+  "description": "Smart Financial Management - Aplikasi Manajemen Keuangan Pribadi modern dan responsif dengan integrasi Google Spreadsheet & Apps Script.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
