@@ -111,6 +111,8 @@ interface FinanceContextType {
   gasUrl: string;
   setGasUrl: (url: string) => void;
   isSyncing: boolean;
+  syncStatusText: string;
+  isInitialLoading: boolean;
   syncWithBackend: () => Promise<void>;
 
   // Data helpers
@@ -171,6 +173,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  // Sync & Loading State
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatusText, setSyncStatusText] = useState('');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+
   // Theme Initializer
   useEffect(() => {
     const settings = storage.getSettings();
@@ -205,8 +212,58 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setAccounts(storage.getAccounts(userId));
   }, [user]);
 
+  // 1. Auto-Fetch saat Halaman Dimuat (Initial Mount & DOM Loaded)
   useEffect(() => {
+    // Muat data lokal terlebih dahulu secara instan
     reloadAllData();
+
+    // Jika URL Google Apps Script sudah diset, otomatis tarik data terbaru dari Google Sheets (Bebas Cache)
+    const gasUrl = storage.getSettings().gasWebAppUrl;
+    if (gasUrl) {
+      setIsSyncing(true);
+      setSyncStatusText('Memuat data terbaru dari Google Sheets...');
+      storage.fetchGasData()
+        .then(res => {
+          if (res.success) {
+            reloadAllData();
+          }
+        })
+        .catch(err => {
+          console.warn('Auto-fetch initial mount error:', err);
+        })
+        .finally(() => {
+          setIsSyncing(false);
+          setIsInitialLoading(false);
+          setSyncStatusText('');
+        });
+    } else {
+      setIsInitialLoading(false);
+    }
+  }, [reloadAllData]);
+
+  // 2. Auto-Sync saat Tab / Layar HP dibuka kembali (Focus & Visibility Change)
+  useEffect(() => {
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        const gasUrl = storage.getSettings().gasWebAppUrl;
+        if (gasUrl) {
+          storage.fetchGasData()
+            .then(res => {
+              if (res.success) {
+                reloadAllData();
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
   }, [reloadAllData]);
 
   // Filtered transactions based on active period
@@ -254,7 +311,27 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setEditingTransaction(null);
   };
 
-  // Transaction CRUD
+  // Helper untuk re-fetch otomatis dari Google Sheets setelah aksi
+  const triggerGasRefetch = async (statusMessage = 'Menyinkronkan dengan Google Sheets...') => {
+    const gasUrl = storage.getSettings().gasWebAppUrl;
+    if (!gasUrl) return;
+
+    setIsSyncing(true);
+    setSyncStatusText(statusMessage);
+    try {
+      const res = await storage.fetchGasData();
+      if (res.success) {
+        reloadAllData();
+      }
+    } catch (err) {
+      console.warn('Re-fetch from Google Sheets error:', err);
+    } finally {
+      setIsSyncing(false);
+      setSyncStatusText('');
+    }
+  };
+
+  // Transaction CRUD (Tambah, Edit, Hapus dengan Otomatis Re-Fetch)
   const createTransaction = (data: {
     date: string;
     type: TransactionType;
@@ -271,9 +348,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       reloadAllData();
       showToast('success', 'Transaksi Berhasil Disimpan', `${data.type === 'income' ? 'Pemasukan' : 'Pengeluaran'} telah dicatat.`);
 
-      // Jika URL Google Apps Script terkonfigurasi, sinkronkan ke Google Sheets (action: 'ADD')
+      // Jika URL Google Apps Script terkonfigurasi, sinkronkan ke Google Sheets lalu RE-FETCH data terbaru
       const gasUrl = storage.getSettings().gasWebAppUrl;
       if (gasUrl) {
+        setIsSyncing(true);
+        setSyncStatusText('Menyimpan transaksi ke Google Sheets...');
         storage.addGasData({
           id: newTx.transactionId,
           transactionId: newTx.transactionId,
@@ -284,13 +363,17 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           amount: newTx.amount,
           account: newTx.account,
           description: newTx.description
-        }).then(res => {
+        }).then(async res => {
           if (res.success) {
-            // Auto re-fetch data dari Sheets
-            storage.fetchGasData().then(() => reloadAllData());
+            setSyncStatusText('Memperbarui data dari Google Sheets...');
+            await storage.fetchGasData();
+            reloadAllData();
           }
         }).catch(err => {
           console.warn('Background GAS sync error:', err);
+        }).finally(() => {
+          setIsSyncing(false);
+          setSyncStatusText('');
         });
       }
 
@@ -307,6 +390,24 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (success) {
         reloadAllData();
         showToast('success', 'Transaksi Diperbarui', 'Perubahan transaksi berhasil disimpan.');
+
+        const gasUrl = storage.getSettings().gasWebAppUrl;
+        if (gasUrl) {
+          setIsSyncing(true);
+          setSyncStatusText('Menyinkronkan perubahan ke Google Sheets...');
+          storage.syncAllToGas().then(async res => {
+            if (res.success) {
+              setSyncStatusText('Memperbarui data dari Google Sheets...');
+              await storage.fetchGasData();
+              reloadAllData();
+            }
+          }).catch(err => {
+            console.warn('Background GAS update error:', err);
+          }).finally(() => {
+            setIsSyncing(false);
+            setSyncStatusText('');
+          });
+        }
         return true;
       }
       showToast('error', 'Gagal', 'Transaksi tidak ditemukan.');
@@ -324,16 +425,22 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         reloadAllData();
         showToast('success', 'Transaksi Dihapus', 'Data transaksi telah dihapus dari database.');
 
-        // Jika URL Google Apps Script terkonfigurasi, hapus dari Google Sheets (action: 'DELETE')
+        // Jika URL Google Apps Script terkonfigurasi, hapus dari Google Sheets lalu RE-FETCH
         const gasUrl = storage.getSettings().gasWebAppUrl;
         if (gasUrl) {
-          storage.deleteGasData(id).then(res => {
+          setIsSyncing(true);
+          setSyncStatusText('Menghapus data di Google Sheets...');
+          storage.deleteGasData(id).then(async res => {
             if (res.success) {
-              // Auto re-fetch data dari Sheets
-              storage.fetchGasData().then(() => reloadAllData());
+              setSyncStatusText('Memperbarui data dari Google Sheets...');
+              await storage.fetchGasData();
+              reloadAllData();
             }
           }).catch(err => {
             console.warn('Background GAS delete error:', err);
+          }).finally(() => {
+            setIsSyncing(false);
+            setSyncStatusText('');
           });
         }
 
@@ -346,7 +453,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Category CRUD
+  // Category CRUD (dengan Otomatis Sync & Re-fetch)
   const createCategory = (data: { name: string; type: TransactionType; icon?: string; color?: string }): boolean => {
     try {
       storage.addCategory({
@@ -355,6 +462,11 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       reloadAllData();
       showToast('success', 'Kategori Ditambahkan', `Kategori "${data.name}" siap digunakan.`);
+      
+      const gasUrl = storage.getSettings().gasWebAppUrl;
+      if (gasUrl) {
+        storage.syncAllToGas().then(() => triggerGasRefetch('Sinkronisasi kategori...'));
+      }
       return true;
     } catch (e) {
       showToast('error', 'Gagal', 'Tidak dapat menambahkan kategori.');
@@ -368,6 +480,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (ok) {
         reloadAllData();
         showToast('success', 'Kategori Diperbarui', 'Data kategori berhasil diubah.');
+        const gasUrl = storage.getSettings().gasWebAppUrl;
+        if (gasUrl) {
+          storage.syncAllToGas().then(() => triggerGasRefetch('Sinkronisasi kategori...'));
+        }
         return true;
       }
       return false;
@@ -383,6 +499,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (ok) {
         reloadAllData();
         showToast('success', 'Kategori Dihapus', 'Kategori telah dihapus.');
+        const gasUrl = storage.getSettings().gasWebAppUrl;
+        if (gasUrl) {
+          storage.syncAllToGas().then(() => triggerGasRefetch('Sinkronisasi kategori...'));
+        }
         return true;
       }
       return false;
@@ -392,7 +512,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Account CRUD
+  // Account CRUD (dengan Otomatis Sync & Re-fetch)
   const createAccount = (data: { name: string; type: AccountType; initialBalance: number; color?: string }): boolean => {
     try {
       storage.addAccount({
@@ -401,6 +521,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       reloadAllData();
       showToast('success', 'Akun Ditambahkan', `Akun "${data.name}" berhasil dibuat.`);
+      const gasUrl = storage.getSettings().gasWebAppUrl;
+      if (gasUrl) {
+        storage.syncAllToGas().then(() => triggerGasRefetch('Sinkronisasi rekening/akun...'));
+      }
       return true;
     } catch (e) {
       showToast('error', 'Gagal', 'Tidak dapat membuat akun.');
@@ -414,6 +538,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (ok) {
         reloadAllData();
         showToast('success', 'Akun Diperbarui', 'Informasi akun berhasil disimpan.');
+        const gasUrl = storage.getSettings().gasWebAppUrl;
+        if (gasUrl) {
+          storage.syncAllToGas().then(() => triggerGasRefetch('Sinkronisasi rekening/akun...'));
+        }
         return true;
       }
       return false;
@@ -429,6 +557,10 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (ok) {
         reloadAllData();
         showToast('success', 'Akun Dihapus', 'Akun keuangan telah dihapus.');
+        const gasUrl = storage.getSettings().gasWebAppUrl;
+        if (gasUrl) {
+          storage.syncAllToGas().then(() => triggerGasRefetch('Sinkronisasi rekening/akun...'));
+        }
         return true;
       }
       return false;
@@ -438,7 +570,6 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const [isSyncing, setIsSyncing] = useState(false);
   const gasUrl = storage.getSettings().gasWebAppUrl || '';
 
   const syncWithBackend = async () => {
@@ -450,11 +581,12 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     setIsSyncing(true);
+    setSyncStatusText('Memuat data terbaru dari Google Sheets...');
     try {
       const res = await storage.fetchGasData();
       if (res.success) {
         reloadAllData();
-        showToast('success', 'Sinkronisasi Berhasil', `Data (${res.data?.length || 0} transaksi) berhasil dimuat dari Google Sheets.`);
+        showToast('success', 'Sinkronisasi Berhasil', `Data (${res.data?.transactions?.length || res.data?.length || 0} transaksi) berhasil dimuat dari Google Sheets.`);
       } else {
         showToast('error', 'Sinkronisasi Gagal', res.message || 'Gagal tersambung ke Google Sheets.');
       }
@@ -462,6 +594,7 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       showToast('error', 'Error Sinkronisasi', e?.message || 'Tidak dapat terhubung ke Google Apps Script.');
     } finally {
       setIsSyncing(false);
+      setSyncStatusText('');
     }
   };
 
@@ -535,6 +668,8 @@ export const FinanceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         gasUrl,
         setGasUrl,
         isSyncing,
+        syncStatusText,
+        isInitialLoading,
         syncWithBackend,
         reloadAllData,
         refreshAllData: reloadAllData,

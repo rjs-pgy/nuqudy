@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { FinanceProvider, useFinance } from './context/FinanceContext';
 import { LoginPage } from './components/auth/LoginPage';
@@ -19,7 +20,7 @@ import { ToastContainer } from './components/common/Toast';
 
 const MainAppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
-  const { activeTab, toasts, removeToast, confirmModal, setConfirmModal } = useFinance();
+  const { activeTab, toasts, removeToast, confirmModal, setConfirmModal, isSyncing, syncStatusText } = useFinance();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   if (!isAuthenticated) {
@@ -56,6 +57,17 @@ const MainAppContent: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen bg-[#F8FAFC] dark:bg-[#0B0F19] text-[#1E293B] dark:text-slate-100 font-sans overflow-hidden">
+      {/* Real-time Sync & Loading Indicator */}
+      {isSyncing && (
+        <div
+          id="sync-loading-indicator"
+          className="fixed top-3.5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 text-emerald-300 dark:bg-emerald-950/90 dark:text-emerald-200 border border-emerald-500/30 shadow-lg text-xs font-semibold backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 pointer-events-none"
+        >
+          <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+          <span>{syncStatusText || 'Memuat data dari Google Sheets...'}</span>
+        </div>
+      )}
+
       {/* Desktop Sidebar */}
       <div className="hidden lg:block h-full shrink-0">
         <Sidebar />

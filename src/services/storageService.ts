@@ -456,18 +456,29 @@ class StorageService {
 
   /**
    * Fetch data from Google Apps Script Web App (via GET / doGet)
+   * With Cache-Busting (?t=timestamp & cache: 'no-store') for real-time mobile sync.
    * Supports both full database bundle and transaction list.
    */
   public async fetchGasData(customUrl?: string): Promise<ApiResponse<any>> {
-    const url = customUrl || this.getSettings().gasWebAppUrl;
-    if (!url) {
+    const baseUrl = customUrl || this.getSettings().gasWebAppUrl;
+    if (!baseUrl) {
       return { success: false, message: 'URL Google Apps Script belum dikonfigurasi.' };
     }
 
     try {
-      const response = await fetch(url, {
+      // Cache-Busting: Append unique timestamp parameter so mobile browser never serves stale cache
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      const cacheBustUrl = `${baseUrl}${separator}t=${Date.now()}`;
+
+      const response = await fetch(cacheBustUrl, {
         method: 'GET',
-        headers: { Accept: 'application/json' }
+        cache: 'no-store',
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       });
       const json = await response.json();
       

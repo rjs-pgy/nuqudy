@@ -610,41 +610,185 @@ function doPost(e) {
 
 export const FRONTEND_JS_CODE = `/**
  * =========================================================================
- * FRONTEND JAVASCRIPT / TYPESCRIPT CLIENT (Web App)
- * Multi-Sheet Real-Time Database Client (Users, Transactions, Categories, Accounts)
+ * FRONTEND JAVASCRIPT CLIENT (Nuqudy Real-Time Multi-Sheet Client)
+ * Dilengkapi Cache-Busting, Auto-Fetch saat Dimuat, Re-Fetch setelah Aksi,
+ * serta Indikator Loading Real-Time.
  * =========================================================================
  */
 
-// URL Google Apps Script Web App Anda (Deployment Exec URL)
+// URL Web App Google Apps Script Anda (akhiran /exec)
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycb.../exec";
 
+// State Manajemen Lokal
+let appState = {
+  isLoading: false,
+  loadingMessage: "",
+  data: {
+    users: [],
+    transactions: [],
+    categories: [],
+    accounts: [],
+    settings: {}
+  }
+};
+
 /**
- * 1. Mengambil Seluruh Database (Users, Transactions, Categories, Accounts)
+ * Helper: Menampilkan/Menyembunyikan Indikator Loading di UI
  */
-async function fetchAllDatabase() {
-  try {
-    const res = await fetch(GAS_WEB_APP_URL, {
-      method: "GET",
-      headers: { "Accept": "application/json" }
-    });
-    const json = await res.json();
-    if (json.success) {
-      console.log("Database berhasil dimuat:", json.data);
-      return json.data;
+function setLoading(isLoading, message = "Memuat data...") {
+  appState.isLoading = isLoading;
+  appState.loadingMessage = message;
+
+  const loadingEl = document.getElementById("sync-loading-indicator");
+  if (loadingEl) {
+    if (isLoading) {
+      loadingEl.style.display = "flex";
+      loadingEl.innerText = message;
+    } else {
+      loadingEl.style.display = "none";
     }
-    return null;
-  } catch (err) {
-    console.error("Fetch Error:", err);
-    return null;
   }
 }
 
 /**
- * 2. Login & Verifikasi Sandi via Google Sheets
+ * 1. PENGAMBILAN DATA BEBAS CACHE (Cache-Busting & no-store)
+ * Menambahkan parameter timestamp ?t=Date.now() dan header cache: 'no-store'
+ * agar browser HP/Laptop selalu mengambil data terbaru dari Google Sheets.
+ */
+async function fetchAllDatabase(customUrl) {
+  const baseUrl = customUrl || GAS_WEB_APP_URL;
+  if (!baseUrl) return null;
+
+  setLoading(true, "Memuat data terbaru dari Google Sheets...");
+
+  try {
+    // Parameter timestamp unik mencegah cache di browser HP
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    const cacheBustUrl = \`\${baseUrl}\${separator}t=\${Date.now()}\`;
+
+    const response = await fetch(cacheBustUrl, {
+      method: "GET",
+      cache: "no-store", // Mencegah caching di level HTTP browser
+      headers: {
+        "Accept": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0"
+      }
+    });
+
+    const json = await response.json();
+
+    if (json && json.success) {
+      // Simpan data terbaru ke state & localStorage
+      appState.data = json.data;
+      localStorage.setItem("NUQUDY_TRANSACTIONS_V2", JSON.stringify(json.data.transactions || []));
+      localStorage.setItem("NUQUDY_USERS_V2", JSON.stringify(json.data.users || []));
+      localStorage.setItem("NUQUDY_CATEGORIES_V2", JSON.stringify(json.data.categories || []));
+      localStorage.setItem("NUQUDY_ACCOUNTS_V2", JSON.stringify(json.data.accounts || []));
+
+      // Render ulang tampilan antarmuka (UI)
+      renderAppUI();
+      return json.data;
+    }
+    return null;
+  } catch (err) {
+    console.error("Gagal sinkronisasi data dari Google Sheets:", err);
+    return null;
+  } finally {
+    setLoading(false);
+  }
+}
+
+/**
+ * 2. AUTO-FETCH SAAT HALAMAN DIMUAT (DOMContentLoaded / Initial Mount)
+ * Otomatis mengambil data begitu browser dibuka di HP atau Laptop
+ */
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("Halaman dimuat, memulai auto-fetch dari Google Sheets...");
+  fetchAllDatabase();
+});
+
+// Auto-sync saat tab browser dibuka kembali di HP (Focus/Visibility)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    console.log("Tab aktif kembali, menyinkronkan data...");
+    fetchAllDatabase();
+  }
+});
+
+/**
+ * 3. TAMBAH TRANSAKSI + OTOMATIS RE-FETCH TERBARU
+ * Setelah data terkirim via POST, langsung panggil ulang fetchAllDatabase()
+ */
+async function addTransaction(transactionData) {
+  setLoading(true, "Menyimpan transaksi ke Google Sheets...");
+
+  try {
+    const response = await fetch(GAS_WEB_APP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "ADD",
+        ...transactionData
+      })
+    });
+
+    const result = await response.json();
+
+    if (result && result.success) {
+      // WAJIB: Panggil ulang pengambil data agar tampilan HP & Laptop 100% sinkron
+      setLoading(true, "Memperbarui tampilan data...");
+      await fetchAllDatabase();
+    }
+    return result;
+  } catch (err) {
+    console.error("Gagal menambah transaksi:", err);
+    return { success: false, message: err.message };
+  } finally {
+    setLoading(false);
+  }
+}
+
+/**
+ * 4. HAPUS TRANSAKSI + OTOMATIS RE-FETCH TERBARU
+ */
+async function deleteTransaction(transactionId) {
+  setLoading(true, "Menghapus transaksi di Google Sheets...");
+
+  try {
+    const response = await fetch(GAS_WEB_APP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "DELETE",
+        id: transactionId
+      })
+    });
+
+    const result = await response.json();
+
+    if (result && result.success) {
+      // Otomatis tarik data terbaru setelah penghapusan berhasil
+      setLoading(true, "Memperbarui data...");
+      await fetchAllDatabase();
+    }
+    return result;
+  } catch (err) {
+    console.error("Gagal menghapus transaksi:", err);
+    return { success: false, message: err.message };
+  } finally {
+    setLoading(false);
+  }
+}
+
+/**
+ * 5. LOGIN PENGGUNA VIA GOOGLE SHEETS
  */
 async function loginUser(username, password) {
+  setLoading(true, "Memverifikasi akun...");
   try {
-    const res = await fetch(GAS_WEB_APP_URL, {
+    const response = await fetch(GAS_WEB_APP_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({
@@ -653,96 +797,20 @@ async function loginUser(username, password) {
         password: password
       })
     });
-    return await res.json();
+    return await response.json();
   } catch (err) {
     return { success: false, message: err.message };
+  } finally {
+    setLoading(false);
   }
 }
 
 /**
- * 3. Update Profil Pengguna ke Google Sheets
+ * Helper fungsi untuk render tampilan aplikasi
  */
-async function updateUserProfile(userId, { name, email, currency }) {
-  try {
-    const res = await fetch(GAS_WEB_APP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "UPDATE_PROFILE",
-        userId: userId,
-        name: name,
-        email: email,
-        currency: currency
-      })
-    });
-    return await res.json();
-  } catch (err) {
-    return { success: false, message: err.message };
-  }
-}
-
-/**
- * 4. Ubah Kata Sandi Akun di Google Sheets
- */
-async function changeUserPassword(userId, oldPassword, newPassword) {
-  try {
-    const res = await fetch(GAS_WEB_APP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "CHANGE_PASSWORD",
-        userId: userId,
-        oldPassword: oldPassword,
-        newPassword: newPassword
-      })
-    });
-    return await res.json();
-  } catch (err) {
-    return { success: false, message: err.message };
-  }
-}
-
-/**
- * 5. Tambah Transaksi ke Google Sheets
- */
-async function addTransaction(payload) {
-  try {
-    const res = await fetch(GAS_WEB_APP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "ADD",
-        ...payload
-      })
-    });
-    const result = await res.json();
-    if (result.success) {
-      // Auto re-fetch
-      await fetchAllDatabase();
-    }
-    return result;
-  } catch (err) {
-    return { success: false, message: err.message };
-  }
-}
-
-/**
- * 6. Hapus Transaksi dari Google Sheets
- */
-async function deleteTransaction(transactionId) {
-  try {
-    const res = await fetch(GAS_WEB_APP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "DELETE",
-        id: transactionId
-      })
-    });
-    return await res.json();
-  } catch (err) {
-    return { success: false, message: err.message };
-  }
+function renderAppUI() {
+  console.log("Data siap dirender:", appState.data);
+  // Kode update DOM/tampilan UI Anda di sini
 }
 `;
 
