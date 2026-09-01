@@ -253,7 +253,7 @@ class StorageService {
       username: cleanUsername,
       password: user.password || 'admin123',
       name: user.name?.trim() || cleanUsername,
-      email: user.email?.trim() || `${cleanUsername}@nuqudy.app`,
+      email: user.email ? user.email.trim() : '',
       currency: user.currency || 'Rp',
       role: user.role || 'member',
       status: user.status || 'active',

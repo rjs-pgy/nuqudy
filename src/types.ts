@@ -16,7 +16,7 @@ export interface User {
   username: string;
   password?: string;
   name: string;
-  email: string;
+  email?: string;
   currency?: string;
   role?: 'admin' | 'member';
   status: 'active' | 'inactive';

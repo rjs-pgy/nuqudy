@@ -156,7 +156,7 @@ export const AccountManagementPage: React.FC = () => {
       const res = await addUser({
         username: newUserUsername.trim().toLowerCase(),
         name: newUserName.trim() || newUserUsername.trim(),
-        email: newUserEmail.trim() || `${newUserUsername.trim().toLowerCase()}@nuqudy.app`,
+        email: newUserEmail.trim(),
         password: newUserPassword.trim() || 'admin123',
         role: newUserRole
       });
@@ -244,7 +244,8 @@ export const AccountManagementPage: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Username: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">@{user?.username}</span> &bull; {user?.email}
+              Username: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">@{user?.username}</span>
+              {user?.email && <span> &bull; {user.email}</span>}
             </p>
           </div>
         </div>
@@ -381,8 +382,9 @@ export const AccountManagementPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Email */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                    Alamat Email
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                    <span>Alamat Email</span>
+                    <span className="text-[10px] font-normal text-slate-400 normal-case">(Opsional)</span>
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -393,10 +395,13 @@ export const AccountManagementPage: React.FC = () => {
                       id="profile-email-input"
                       value={profileEmail}
                       onChange={e => setProfileEmail(e.target.value)}
+                      placeholder="misal: nama@domain.com (opsional)"
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
-                      required
                     />
                   </div>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                    Boleh dikosongkan. Login tetap menggunakan Username.
+                  </p>
                 </div>
 
                 {/* Mata Uang Utama */}
@@ -666,7 +671,7 @@ export const AccountManagementPage: React.FC = () => {
                         @{u.username}
                       </td>
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
-                        {u.email}
+                        {u.email || <span className="text-slate-400 italic">Tanpa Email</span>}
                       </td>
                       <td className="py-3 px-4">
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
@@ -824,14 +829,15 @@ export const AccountManagementPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1">
-                  Alamat Email
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1 flex items-center justify-between">
+                  <span>Alamat Email</span>
+                  <span className="text-[10px] font-normal text-slate-400 normal-case">(Opsional)</span>
                 </label>
                 <input
                   type="email"
                   value={newUserEmail}
                   onChange={e => setNewUserEmail(e.target.value)}
-                  placeholder="budi@nuqudy.app"
+                  placeholder="Opsional (boleh dikosongkan)"
                   className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-emerald-500/30"
                 />
               </div>

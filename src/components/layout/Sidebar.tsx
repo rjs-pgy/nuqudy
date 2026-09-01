@@ -157,8 +157,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
               </p>
               <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
             </div>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
-              {typeof user?.email === 'string' ? user.email : 'admin@nuqudy.app'}
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate font-mono">
+              {user?.email ? user.email : `@${user?.username || 'admin'}`}
             </p>
           </div>
           <button
