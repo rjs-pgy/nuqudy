@@ -48,35 +48,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     try {
       storageService.initDatabase();
-      refreshUsers();
+      const allUsers = storageService.getUsers();
+      setUsers(allUsers);
 
       const stored = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && typeof parsed === 'object') {
-          let cleanName = 'Pengguna Nuqudy';
-          if (typeof parsed.name === 'string') {
-            cleanName = parsed.name;
-          } else if (parsed.name && typeof parsed.name === 'object' && parsed.name.name) {
-            cleanName = String(parsed.name.name);
-          }
-
-          let cleanEmail = 'admin@nuqudy.app';
-          if (typeof parsed.email === 'string') {
-            cleanEmail = parsed.email;
-          } else if (parsed.name && typeof parsed.name === 'object' && parsed.name.email) {
-            cleanEmail = String(parsed.name.email);
-          }
-
+          // Cross-reference with database to ensure up-to-date name, username, email
+          const dbUser = allUsers.find(u => u.userId === parsed.userId || u.username.toLowerCase() === (parsed.username || '').toLowerCase());
+          
           const sanitizedUser: User = {
-            userId: parsed.userId || 'USR-ADMIN01',
-            username: parsed.username || 'admin',
-            name: cleanName,
-            email: cleanEmail,
-            currency: typeof parsed.currency === 'string' ? parsed.currency : (parsed.name?.currency || 'Rp'),
-            role: parsed.role || 'admin',
-            status: parsed.status || 'active',
-            createdAt: parsed.createdAt || new Date().toISOString()
+            userId: dbUser?.userId || parsed.userId || 'USR-ADMIN01',
+            username: dbUser?.username || parsed.username || 'admin',
+            name: dbUser?.name || parsed.name || 'Pengguna Nuqudy',
+            email: dbUser?.email !== undefined ? dbUser.email : (parsed.email || ''),
+            currency: dbUser?.currency || parsed.currency || 'Rp',
+            role: dbUser?.role || parsed.role || 'admin',
+            status: dbUser?.status || parsed.status || 'active',
+            createdAt: dbUser?.createdAt || parsed.createdAt || new Date().toISOString()
           };
 
           setUser(sanitizedUser);
@@ -102,16 +92,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: 'Username dan password wajib diisi!' };
     }
 
-    // 1. Check in local stored users first
+    // 1. Check strictly in stored users list
     const storedUsers = storageService.getUsers();
     let found = storedUsers.find(
       u => u.username.toLowerCase() === cleanUsername && u.password === cleanPassword
     );
-
-    // Also check if admin account with default fallback if no password is set
-    if (!found && cleanUsername === 'admin' && cleanPassword === 'admin123') {
-      found = storedUsers.find(u => u.username.toLowerCase() === 'admin') || DEFAULT_DEMO_USER;
-    }
 
     // 2. If not found locally, try Google Apps Script live login if configured
     const settings = storageService.getSettings();
@@ -129,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             username: gasJson.data.username || cleanUsername,
             password: cleanPassword,
             name: gasJson.data.name || cleanUsername,
-            email: gasJson.data.email || `${cleanUsername}@nuqudy.app`,
+            email: gasJson.data.email || '',
             currency: gasJson.data.currency || 'Rp',
             role: gasJson.data.role || 'admin',
             status: 'active',
@@ -263,7 +248,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const currentSavedPass = currentUserInStore?.password || 'admin123';
 
-    if (cleanOld && currentSavedPass && cleanOld !== currentSavedPass && currentSavedPass !== 'admin123') {
+    if (cleanOld !== currentSavedPass) {
       return { success: false, message: 'Kata sandi lama yang Anda masukkan salah.' };
     }
 
