@@ -4,9 +4,9 @@ import { Logo } from '../common/Logo';
 import { useAuth } from '../../context/AuthContext';
 
 export const LoginPage: React.FC = () => {
-  const { login, isLoading } = useAuth();
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const { login, isLoading, users } = useAuth();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -26,8 +26,25 @@ export const LoginPage: React.FC = () => {
   };
 
   const handleUseDemo = () => {
-    setUsername('admin');
-    setPassword('admin123');
+    // If there is an active user with default username 'admin', fill it
+    const adminUser = users.find(u => u.username.toLowerCase() === 'admin');
+    if (adminUser) {
+      setUsername(adminUser.username);
+      if (adminUser.password) {
+        setPassword(adminUser.password);
+      } else {
+        setPassword('admin123');
+      }
+    } else if (users.length > 0) {
+      // Use the first existing user
+      setUsername(users[0].username);
+      if (users[0].password) {
+        setPassword(users[0].password);
+      }
+    } else {
+      setUsername('admin');
+      setPassword('admin123');
+    }
     setErrorMessage('');
   };
 
